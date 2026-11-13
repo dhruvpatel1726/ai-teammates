@@ -15,6 +15,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Database
 
-- Apply schema changes with `npm run db:push` (`drizzle-kit push`) only.
+- Apply schema changes with `npm run db:push` (`drizzle-kit push`) only. Add `--force` when the shell has no TTY (agents/CI), since `push` refuses to prompt there.
 - Never run migrations: no `drizzle-kit generate`, no `drizzle-kit migrate`, and do not create migration files, a migrations directory, or migration scripts.
 - This is a development project. There is no backwards compatibility and the data is worthless. Prefer data loss: never backfill, migrate, or preserve existing rows, and never spend effort on keeping old data working. Every schema change means a clean state.
