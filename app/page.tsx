@@ -1,9 +1,7 @@
 import { UserButton } from "@clerk/nextjs"
 import { auth } from "@clerk/nextjs/server"
-import { PlusIcon } from "lucide-react"
 
 import { ChatAvatar } from "@/components/chat-avatar"
-import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyContent,
@@ -12,13 +10,20 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import BotDialog from "@/components/bot-dialog"
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: { open?: string }
+}) {
   // Signed-out visitors are redirected to /sign-in before anything renders.
   await auth.protect()
 
   // A fresh seed per request keeps the avatar changing on every refresh.
   const seed = crypto.randomUUID()
+
+  const open = searchParams?.open === "1"
 
   return (
     <div className="flex min-h-svh flex-col gap-6 p-6">
@@ -38,10 +43,7 @@ export default async function Page() {
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button variant="secondary">
-            <PlusIcon data-icon="inline-start" />
-            Create a new bot
-          </Button>
+          <BotDialog open={open} />
         </EmptyContent>
       </Empty>
     </div>
