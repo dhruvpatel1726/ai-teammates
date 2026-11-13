@@ -1,0 +1,33 @@
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+
+import * as schema from "./schema";
+
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error(
+    "DATABASE_URL is not set. Add it to .env.local (see .env.example).",
+  );
+}
+
+/**
+ * Reuse the pool across hot reloads in development. Every module reload would
+ * otherwise create a new pool and steadily exhaust Neon's connection limit.
+ */
+const globalForDb = globalThis as unknown as { pool?: Pool };
+
+const pool =
+  globalForDb.pool ??
+  new Pool({
+    connectionString,
+    max: 10,
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForDb.pool = pool;
+}
+
+export const db = drizzle(pool, { schema });
+export { pool };
+export * from "./schema";
