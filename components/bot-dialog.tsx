@@ -55,7 +55,14 @@ function BotDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) handleClose() }}>
-      <DialogTrigger render={<Button variant="secondary" />}>
+      <DialogTrigger
+        render={
+          <Button
+            variant="secondary"
+            onClick={() => router.push("/?open=1")}
+          />
+        }
+      >
         <PlusIcon data-icon="inline-start" />
         Create a new bot
       </DialogTrigger>
