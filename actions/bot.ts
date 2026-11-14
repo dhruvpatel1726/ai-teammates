@@ -1,34 +1,57 @@
 "use server"
-import { db } from "@/lib/db"
-import { bots, insertBotSchema } from "@/db/schema"
-import { auth } from "@clerk/nextjs/server"
 
-export async function createBot(formData: FormData) {
-  const user = await auth()
-  if (!user?.userId) {
-    return { error: "Unauthenticated" }
+import { auth } from "@clerk/nextjs/server"
+import { revalidatePath } from "next/cache"
+
+import { db } from "@/db"
+import { bots, createBotSchema, type CreateBotInput } from "@/db/schema"
+
+export type CreateBotResult =
+  { botId: string; error: null } | { botId: null; error: string }
+
+/**
+ * Creates a bot owned by the signed-in user.
+ *
+ * Everything the form supplies is re-validated here: Server Actions are public
+ * endpoints, so the client-side resolver is a convenience, not a guarantee.
+ */
+export async function createBot(
+  input: CreateBotInput
+): Promise<CreateBotResult> {
+  const { isAuthenticated, userId } = await auth()
+  if (!isAuthenticated || !userId) {
+    return { botId: null, error: "You need to be signed in to create a bot." }
   }
 
-  const parsed = insertBotSchema.parse({
-    name: formData.get("name") as string,
-    job: formData.get("job") as string,
-    instructions: (formData.get("instructions") as string) || undefined,
-  })
+  const parsed = createBotSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      botId: null,
+      error:
+        parsed.error.issues[0]?.message ?? "Those bot details are not valid.",
+    }
+  }
 
-  const avatar = crypto.randomUUID()
+  try {
+    const [bot] = await db
+      .insert(bots)
+      .values({
+        userId,
+        name: parsed.data.name,
+        job: parsed.data.job,
+        avatar: parsed.data.avatar,
+        instructions: parsed.data.instructions || null,
+      })
+      .returning()
 
-  const bot = await db
-    .insert(bots)
-    .values({
-      id: crypto.randomUUID(),
-      userId: user.userId,
-      name: parsed.name,
-      avatar,
-      job: parsed.job,
-      instructions: parsed.instructions || null,
-      sandboxId: parsed.sandboxId || null,
-    })
-    .returning();
+    revalidatePath("/")
 
-  return { error: null, bot }
+    return { botId: bot.id, error: null }
+  } catch (error) {
+    console.error("Failed to create bot", error)
+    return {
+      botId: null,
+      error: "Could not create the bot. Please try again.",
+    }
+  }
 }

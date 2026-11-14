@@ -19,6 +19,54 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Never run migrations: no `drizzle-kit generate`, no `drizzle-kit migrate`, and do not create migration files, a migrations directory, or migration scripts.
 - This is a development project. There is no backwards compatibility and the data is worthless. Prefer data loss: never backfill, migrate, or preserve existing rows, and never spend effort on keeping old data working. Every schema change means a clean state.
 
+## Forms
+
+Stack: shadcn `base-nova` (Base UI primitives), `react-hook-form`, Zod 4, `drizzle-zod`, Clerk 7, Next 16.
+
+### One schema, defined in `db/schema.ts`
+
+- Derive validation from the table with `createInsertSchema(table, { ...refinements })`. Never hand-write a parallel form schema.
+- Normalize and cap user text in the schema (`.trim().min(1, "...").max(60, "...")`), not in the component, so the form and action behave identically.
+- Export a second schema for the create form with `.pick()` of the user-editable columns, plus any client-supplied value such as an avatar seed. Server-owned columns (`id`, `userId`, `createdAt`) never appear in a form.
+- Infer types with `z.infer` and use them on both sides: `useForm<CreateBotInput>(...)` and `createBot(input: CreateBotInput)`.
+
+### Form markup
+
+- Compose with `Field`, `FieldGroup`, `FieldLabel`, `FieldDescription`, `FieldError` inside a real `<form>`. No raw `div` + `label`, no `space-y-*`.
+- Pair every `FieldLabel htmlFor` with the control's `id`. Render `<FieldError errors={[errors.name]} />`, set `data-invalid` on the `Field` and `aria-invalid` on the control.
+- Use `Input`, `Textarea`, `Button`, and other controls from `components/ui`. Never raw HTML inputs.
+- Suggestion chips are `Button type="button"` that call `form.setValue(..., { shouldDirty: true, shouldValidate: true })`. Real option sets (2–7 choices) use `ToggleGroup`.
+- Any button inside a form that must not submit needs `type="button"`. Base UI `Button` defaults to `type="button"`, so the submit button must be explicit: `type="submit"`.
+
+### react-hook-form
+
+- Use `zodResolver` from `@hookform/resolvers/zod`.
+- Read live values with `useWatch({ control, name })`, never `form.watch(...)`; React Compiler cannot memoize `watch()` and flags it as an incompatible library.
+- Drive pending UI from `formState.isSubmitting`. `Button` has no `isLoading`; compose `<Spinner data-icon="inline-start" />` and `disabled`.
+- Reset with `form.reset(defaultValues)` when the dialog closes or the submit succeeds.
+
+### Dialog forms
+
+- Always render a `DialogTitle` (use `className="sr-only"` only if it must be hidden).
+- Keep `DialogHeader` outside the form, but put the fields and `DialogFooter` inside the same `<form>` so the footer's submit button submits. Base UI portals preserve React event bubbling, so this works.
+- Use `render={<Button ... />}` for triggers and close buttons (Base UI). Never use `asChild`.
+- Multi-field dialogs get `className="sm:max-w-md"`; the default `sm:max-w-sm` is too narrow for preset chips.
+- Keep the trigger and dialog in one client component. Accept `defaultOpen` for deep links (`/?open=1`) and pass server-generated seeds down as props.
+
+### Server actions
+
+- Re-validate with the same schema using `safeParse`; return `{ error }` instead of throwing so the form can show it.
+- `const { isAuthenticated, userId } = await auth()` from `@clerk/nextjs/server`. Never accept a `userId` from the client.
+- Insert through `@/db` (the Postgres pool). Do not use `lib/db.ts`; it is a stale libsql client that does not match the Postgres schema.
+- Call `revalidatePath("/")` after the mutation, and call the action with a typed object rather than `FormData`.
+
+### Details that bite
+
+- Never generate random seeds or IDs in `useState` initializers for rendered avatars: the client component is SSR'd, so server and client disagree and hydration fails. Pass a server seed as a prop, or generate in an event handler / effect.
+- Show success and error feedback with `toast.add(...)` from `components/ui/toast` (Base UI). `Toaster` is already mounted in `app/layout.tsx`; Sonner is for Radix projects, not this one.
+- Next 16: `searchParams` is a `Promise` — `const { open } = await searchParams`.
+- Finish with `npm run typecheck` and `npx eslint <touched files>`. `npm run lint` also scans the `.agents`/`.claude` skill templates and reports unrelated warnings.
+
 ## DiceBear
 
 Use DiceBear 10. Documentation: https://www.dicebear.com/llms.txt

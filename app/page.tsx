@@ -15,7 +15,7 @@ import BotDialog from "@/components/bot-dialog"
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { open?: string }
+  searchParams: Promise<{ open?: string }>
 }) {
   // Signed-out visitors are redirected to /sign-in before anything renders.
   await auth.protect()
@@ -23,7 +23,7 @@ export default async function Page({
   // A fresh seed per request keeps the avatar changing on every refresh.
   const seed = crypto.randomUUID()
 
-  const open = searchParams?.open === "1"
+  const open = (await searchParams).open === "1"
 
   return (
     <div className="flex min-h-svh flex-col gap-6 p-6">
@@ -43,7 +43,7 @@ export default async function Page({
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <BotDialog open={open} />
+          <BotDialog defaultOpen={open} defaultAvatarSeed={seed} />
         </EmptyContent>
       </Empty>
     </div>
