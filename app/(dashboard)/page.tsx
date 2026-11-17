@@ -1,4 +1,3 @@
-import { UserButton } from "@clerk/nextjs"
 import { auth } from "@clerk/nextjs/server"
 
 import { ChatAvatar } from "@/components/chat-avatar"
@@ -27,10 +26,6 @@ export default async function Page({
 
   return (
     <div className="flex min-h-svh flex-col gap-6 p-6">
-      <header className="flex items-center justify-end gap-3">
-        <UserButton />
-      </header>
-
       <Empty>
         <EmptyHeader>
           <EmptyMedia>
