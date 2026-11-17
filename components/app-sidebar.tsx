@@ -37,6 +37,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
 } from "@/components/ui/sidebar"
 import { BOT_CREATED_EVENT } from "@/lib/chat-events"
 import type { UserChat } from "@/queries/bots"
@@ -85,7 +86,7 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
   }, [])
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader className="items-end">
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -111,14 +112,14 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
 
         <Button
           variant="ghost"
-          className="h-8 w-full min-w-0 justify-start rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
+          className="h-8 w-full min-w-0 justify-start rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
           onClick={() => setSearchOpen(true)}
         >
           <SearchIcon data-icon="inline-start" />
-          <span className="min-w-0 truncate text-muted-foreground">
+          <span className="min-w-0 truncate text-muted-foreground group-data-[collapsible=icon]:hidden">
             Search chats...
           </span>
-          <KbdGroup className="ml-auto">
+          <KbdGroup className="ml-auto group-data-[collapsible=icon]:hidden">
             <Kbd>
               {mounted && /Mac|iPhone|iPad/.test(navigator.userAgent)
                 ? "⌘"
@@ -138,8 +139,10 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
                 <SidebarMenuItem key={chat.id}>
                   <SidebarMenuButton size="lg" tooltip={chat.title}>
                     <ChatAvatar seed={chat.avatarSeed} />
-                    <span className="min-w-0 truncate">{chat.title}</span>
-                    <span className="ml-auto shrink-0 text-xs text-sidebar-foreground/60">
+                    <span className="min-w-0 truncate group-data-[collapsible=icon]:hidden">
+                      {chat.title}
+                    </span>
+                    <span className="ml-auto shrink-0 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
                       {chat.dateLabel}
                     </span>
                   </SidebarMenuButton>
@@ -169,7 +172,7 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
                       // so the trigger can fill the sidebar row.
                       rootBox: "h-full! w-full!",
                       userButtonTrigger:
-                        "flex h-full! w-full! items-center gap-2 rounded-md bg-transparent px-2! text-sm font-normal text-inherit ring-sidebar-ring outline-hidden hover:bg-transparent! hover:text-inherit! focus-visible:ring-2 active:bg-transparent! active:text-inherit!",
+                        "flex h-full! w-full! items-center gap-2 rounded-md bg-transparent px-2! text-sm font-normal text-inherit ring-sidebar-ring outline-hidden hover:bg-transparent! hover:text-inherit! focus-visible:ring-2 active:bg-transparent! active:text-inherit! group-data-[collapsible=icon]:px-0!",
                       userButtonBox: "min-w-0 flex-1 justify-start gap-2",
                       userButtonOuterIdentifier:
                         "truncate text-sm font-normal text-inherit group-data-[collapsible=icon]:hidden",
@@ -180,9 +183,9 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
                   }}
                 />
               ) : (
-                <div className="flex h-12 w-full items-center gap-2 px-2">
+                <div className="flex h-12 w-full items-center gap-2 px-2 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!">
                   <Skeleton className="size-6 shrink-0 rounded-full" />
-                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-24 group-data-[collapsible=icon]:hidden" />
                 </div>
               )}
             </SidebarMenuButton>
@@ -233,6 +236,8 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
           }}
         />
       )}
+
+      <SidebarRail />
     </Sidebar>
   )
 }
