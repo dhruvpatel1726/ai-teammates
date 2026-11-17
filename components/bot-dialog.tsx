@@ -33,12 +33,17 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { createBotSchema, type CreateBotInput } from "@/db/schema"
+import { BOT_CREATED_EVENT } from "@/lib/chat-events"
 
 type BotDialogProps = {
   /** Open the dialog on first render, e.g. when the URL is `/?open=1`. */
   defaultOpen?: boolean
   /** Seed for the first face shown, so it matches the empty-state avatar. */
   defaultAvatarSeed: string
+  /** Notified whenever the dialog opens or closes, for external owners. */
+  onOpenChange?: (open: boolean) => void
+  /** Hide the built-in trigger when another control opens the dialog. */
+  showTrigger?: boolean
 }
 
 type BotPreset = Pick<CreateBotInput, "name" | "job" | "instructions">
@@ -74,9 +79,19 @@ const presets: Array<BotPreset & { label: string }> = [
   },
 ]
 
-function BotDialog({ defaultOpen = false, defaultAvatarSeed }: BotDialogProps) {
+function BotDialog({
+  defaultOpen = false,
+  defaultAvatarSeed,
+  onOpenChange,
+  showTrigger = true,
+}: BotDialogProps) {
   const router = useRouter()
-  const [open, setOpen] = React.useState(defaultOpen)
+  const [open, setOpenState] = React.useState(defaultOpen)
+
+  function setOpen(nextOpen: boolean) {
+    setOpenState(nextOpen)
+    onOpenChange?.(nextOpen)
+  }
 
   const emptyValues: CreateBotInput = {
     name: "",
@@ -150,15 +165,20 @@ function BotDialog({ defaultOpen = false, defaultAvatarSeed }: BotDialogProps) {
     })
 
     closeDialog()
+    // Both dialog instances fire this, so the sidebar refreshes its chat query
+    // whether the bot was created from the header or the empty state.
+    window.dispatchEvent(new Event(BOT_CREATED_EVENT))
     router.refresh()
   })
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<Button variant="secondary" />}>
-        <PlusIcon data-icon="inline-start" />
-        Create a new bot
-      </DialogTrigger>
+      {showTrigger && (
+        <DialogTrigger render={<Button variant="secondary" />}>
+          <PlusIcon data-icon="inline-start" />
+          Create a new bot
+        </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>

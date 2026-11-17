@@ -2,36 +2,111 @@
 
 import * as React from "react"
 import { UserButton } from "@clerk/nextjs"
+import { BotIcon, MessageCircleIcon, PlusIcon } from "lucide-react"
 
+import { refreshUserChats } from "@/actions/chat"
+import BotDialog from "@/components/bot-dialog"
+import { ChatAvatar } from "@/components/chat-avatar"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Sidebar,
+  SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { BOT_CREATED_EVENT } from "@/lib/chat-events"
+import type { UserChat } from "@/queries/bots"
 
 /**
  * The dashboard's navigation sidebar.
  *
- * Navigation is still empty; the footer holds the Clerk user menu.
+ * The content lists the signed-in user's chats; the footer holds the Clerk
+ * user menu.
  */
-function AppSidebar() {
+function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
   // Clerk mounts its UI on the client, so the server has no user to render.
   // Waiting a tick avoids hydrating a placeholder into a fully rendered
   // UserButton, which React reports as a hydration mismatch.
   const [mounted, setMounted] = React.useState(false)
+  const [newBotSeed, setNewBotSeed] = React.useState<string | null>(null)
+  const [chats, setChats] = React.useState(initialChats)
 
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- flips once, after hydration
     setMounted(true)
   }, [])
 
+  const handleBotCreated = React.useCallback(() => {
+    refreshUserChats()
+      .then(setChats)
+      .catch((error) => console.error("Failed to refresh chats", error))
+  }, [])
+
+  React.useEffect(() => {
+    window.addEventListener(BOT_CREATED_EVENT, handleBotCreated)
+    return () => window.removeEventListener(BOT_CREATED_EVENT, handleBotCreated)
+  }, [handleBotCreated])
+
   return (
     <Sidebar>
-      <SidebarHeader />
+      <SidebarHeader className="flex-row items-center justify-end">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="icon" aria-label="Create" />}
+          >
+            <PlusIcon />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onClick={() => setNewBotSeed(crypto.randomUUID())}
+              >
+                <BotIcon />
+                Create a new bot
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <MessageCircleIcon />
+                Create a group chat
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Chats</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {chats.map((chat) => (
+                <SidebarMenuItem key={chat.id}>
+                  <SidebarMenuButton size="lg" tooltip={chat.title}>
+                    <ChatAvatar seed={chat.avatarSeed} />
+                    <span className="min-w-0 truncate">{chat.title}</span>
+                    <span className="ml-auto shrink-0 text-xs text-sidebar-foreground/60">
+                      {chat.dateLabel}
+                    </span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
 
       <SidebarFooter>
         <SidebarMenu>
@@ -72,6 +147,20 @@ function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+
+      {newBotSeed && (
+        <BotDialog
+          key={newBotSeed}
+          defaultOpen
+          defaultAvatarSeed={newBotSeed}
+          showTrigger={false}
+          onOpenChange={(open) => {
+            if (!open) {
+              setNewBotSeed(null)
+            }
+          }}
+        />
+      )}
     </Sidebar>
   )
 }
