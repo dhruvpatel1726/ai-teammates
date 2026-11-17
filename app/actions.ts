@@ -18,9 +18,13 @@ async function requireOwnedChat(chatId: string) {
   if (!ownedChat) throw new Error("Chat not found")
 }
 
-export async function startChatSession({ chatId }: { chatId: string }) {
-  await requireOwnedChat(chatId)
-  return startSession({ chatId })
+export async function startChatSession(
+  params: Parameters<typeof startSession>[0]
+) {
+  await requireOwnedChat(params.chatId)
+  // Forward the transport's client data so the first turn sees the same
+  // per-message selection that later turns receive through metadata.
+  return startSession(params)
 }
 
 export async function mintChatAccessToken(chatId: string) {

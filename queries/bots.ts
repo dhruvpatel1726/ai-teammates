@@ -15,8 +15,18 @@ import { bots, chatMembers, chats } from "@/db/schema"
 export type UserChat = {
   id: string
   title: string
+  kind: "direct" | "group"
   avatarSeed: string
+  botAvatars: string[]
   dateLabel: string
+}
+
+/** A bot the user can pick for a group chat or a chat composer. */
+export type PickableBot = {
+  id: string
+  name: string
+  job: string
+  avatar: string
 }
 
 function formatChatDate(date: Date): string {
@@ -29,8 +39,8 @@ function formatChatDate(date: Date): string {
 /**
  * Chats belonging to the signed-in Clerk user, newest activity first.
  *
- * Each row is joined to its first-joined bot. Group chats are treated the same
- * for now: their avatar and fallback title come from that first bot.
+ * Direct chats keep a single avatar seed; group chats carry every member's
+ * seed so the sidebar can render a grouped avatar and the "+N" count.
  */
 export async function getUserChats(): Promise<UserChat[]> {
   const { isAuthenticated, userId } = await auth()
@@ -51,20 +61,42 @@ export async function getUserChats(): Promise<UserChat[]> {
       asc(chatMembers.botId)
     )
 
-  const seen = new Set<string>()
-  const result: UserChat[] = []
+  const byChatId = new Map<string, UserChat>()
 
   for (const { chat, bot } of rows) {
-    if (seen.has(chat.id)) continue
-    seen.add(chat.id)
-
-    result.push({
-      id: chat.id,
-      title: chat.name?.trim() || bot?.name || "",
-      avatarSeed: bot?.avatar ?? chat.id,
-      dateLabel: formatChatDate(chat.lastMessageAt),
-    })
+    let entry = byChatId.get(chat.id)
+    if (!entry) {
+      entry = {
+        id: chat.id,
+        title:
+          chat.name?.trim() ||
+          (chat.kind === "group" ? "Group chat" : bot?.name || ""),
+        kind: chat.kind,
+        avatarSeed: bot?.avatar ?? chat.id,
+        botAvatars: [],
+        dateLabel: formatChatDate(chat.lastMessageAt),
+      }
+      byChatId.set(chat.id, entry)
+    }
+    if (bot) entry.botAvatars.push(bot.avatar)
   }
 
-  return result
+  return [...byChatId.values()]
+}
+
+/** Bots owned by the signed-in user, ordered by name for pickers. */
+export async function getUserBots(): Promise<PickableBot[]> {
+  const { isAuthenticated, userId } = await auth()
+  if (!isAuthenticated || !userId) return []
+
+  return db
+    .select({
+      id: bots.id,
+      name: bots.name,
+      job: bots.job,
+      avatar: bots.avatar,
+    })
+    .from(bots)
+    .where(eq(bots.userId, userId))
+    .orderBy(asc(bots.name))
 }

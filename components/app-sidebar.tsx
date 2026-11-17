@@ -9,6 +9,8 @@ import { BotIcon, MessageCircleIcon, PlusIcon, SearchIcon } from "lucide-react"
 import { refreshUserChats } from "@/actions/chat"
 import BotDialog from "@/components/bot-dialog"
 import { ChatAvatar } from "@/components/chat-avatar"
+import { GroupChatAvatar } from "@/components/group-chat-avatar"
+import { GroupChatDialog } from "@/components/group-chat-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -46,7 +48,7 @@ import {
   BOT_DELETED_EVENT,
   BOT_UPDATED_EVENT,
 } from "@/lib/chat-events"
-import type { UserChat } from "@/queries/bots"
+import type { PickableBot, UserChat } from "@/queries/bots"
 
 /**
  * The dashboard's navigation sidebar.
@@ -54,7 +56,13 @@ import type { UserChat } from "@/queries/bots"
  * The content lists the signed-in user's chats; the footer holds the Clerk
  * user menu.
  */
-function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
+function AppSidebar({
+  chats: initialChats,
+  bots,
+}: {
+  chats: UserChat[]
+  bots: PickableBot[]
+}) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -68,6 +76,7 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
   const [mounted, setMounted] = React.useState(false)
   const [newBotSeed, setNewBotSeed] = React.useState<string | null>(null)
   const [searchOpen, setSearchOpen] = React.useState(false)
+  const [groupChatOpen, setGroupChatOpen] = React.useState(false)
   const [chats, setChats] = React.useState(initialChats)
 
   React.useEffect(() => {
@@ -75,22 +84,22 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
     setMounted(true)
   }, [])
 
-  const handleBotCreated = React.useCallback(() => {
+  const refreshChats = React.useCallback(() => {
     refreshUserChats()
       .then(setChats)
       .catch((error) => console.error("Failed to refresh chats", error))
   }, [])
 
   React.useEffect(() => {
-    window.addEventListener(BOT_CREATED_EVENT, handleBotCreated)
-    window.addEventListener(BOT_UPDATED_EVENT, handleBotCreated)
-    window.addEventListener(BOT_DELETED_EVENT, handleBotCreated)
+    window.addEventListener(BOT_CREATED_EVENT, refreshChats)
+    window.addEventListener(BOT_UPDATED_EVENT, refreshChats)
+    window.addEventListener(BOT_DELETED_EVENT, refreshChats)
     return () => {
-      window.removeEventListener(BOT_CREATED_EVENT, handleBotCreated)
-      window.removeEventListener(BOT_UPDATED_EVENT, handleBotCreated)
-      window.removeEventListener(BOT_DELETED_EVENT, handleBotCreated)
+      window.removeEventListener(BOT_CREATED_EVENT, refreshChats)
+      window.removeEventListener(BOT_UPDATED_EVENT, refreshChats)
+      window.removeEventListener(BOT_DELETED_EVENT, refreshChats)
     }
-  }, [handleBotCreated])
+  }, [refreshChats])
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -121,7 +130,7 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
                 <BotIcon />
                 Create a new bot
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setGroupChatOpen(true)}>
                 <MessageCircleIcon />
                 Create a group chat
               </DropdownMenuItem>
@@ -162,7 +171,11 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
                     render={<Link href={`/chats/${chat.id}`} />}
                     isActive={chat.id === activeChatId}
                   >
-                    <ChatAvatar seed={chat.avatarSeed} />
+                    {chat.kind === "group" ? (
+                      <GroupChatAvatar seeds={chat.botAvatars} />
+                    ) : (
+                      <ChatAvatar seed={chat.avatarSeed} />
+                    )}
                     <span className="min-w-0 truncate group-data-[collapsible=icon]:hidden">
                       {chat.title}
                     </span>
@@ -238,7 +251,11 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
                     router.push(`/chats/${chat.id}`)
                   }}
                 >
-                  <ChatAvatar seed={chat.avatarSeed} />
+                  {chat.kind === "group" ? (
+                    <GroupChatAvatar seeds={chat.botAvatars} />
+                  ) : (
+                    <ChatAvatar seed={chat.avatarSeed} />
+                  )}
                   <span className="min-w-0 truncate">{chat.title}</span>
                   <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                     {chat.dateLabel}
@@ -263,6 +280,13 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
           }}
         />
       )}
+
+      <GroupChatDialog
+        bots={bots}
+        open={groupChatOpen}
+        onOpenChange={setGroupChatOpen}
+        onCreated={refreshChats}
+      />
 
       <SidebarRail />
     </Sidebar>

@@ -149,6 +149,26 @@ export const chatMembers = pgTable(
   ]
 )
 
+/**
+ * The group-chat form submits a name and the bots that should join it. The
+ * owner and the chat kind are server-owned and never come from the client.
+ */
+export const createGroupChatSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Group name is required")
+    .max(60, "Keep the name under 60 characters"),
+  botIds: z
+    .array(z.string().min(1))
+    .min(2, "Pick at least two bots")
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "Pick each bot only once",
+    }),
+})
+
+export type CreateGroupChatInput = z.infer<typeof createGroupChatSchema>
+
 export type Chat = typeof chats.$inferSelect
 export type NewChat = typeof chats.$inferInsert
 export type ChatMember = typeof chatMembers.$inferSelect

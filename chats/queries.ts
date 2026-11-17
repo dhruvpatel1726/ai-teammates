@@ -10,8 +10,7 @@ export type { ChatDetails }
  * Load a single chat for the signed-in Clerk user.
  *
  * The user ID is part of both the chat and bot filters so a guessed chat ID
- * can never expose another user's conversation. Group chats currently use the
- * first-joined bot for their avatar and details.
+ * can never expose another user's conversation.
  */
 export async function getChat(chatId: string): Promise<ChatDetails | null> {
   const { isAuthenticated, userId } = await auth()

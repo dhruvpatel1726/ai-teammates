@@ -3,14 +3,14 @@ import { cookies } from "next/headers"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { getUserChats } from "@/queries/bots"
+import { getUserBots, getUserChats } from "@/queries/bots"
 
 // Keep in sync with SIDEBAR_COOKIE_NAME in components/ui/sidebar.tsx.
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 
 async function UserSidebar() {
-  const chats = await getUserChats()
-  return <AppSidebar chats={chats} />
+  const [chats, bots] = await Promise.all([getUserChats(), getUserBots()])
+  return <AppSidebar chats={chats} bots={bots} />
 }
 
 export default async function DashboardLayout({
@@ -23,7 +23,7 @@ export default async function DashboardLayout({
 
   return (
     <SidebarProvider defaultOpen={defaultOpen}>
-      <Suspense fallback={<AppSidebar chats={[]} />}>
+      <Suspense fallback={<AppSidebar chats={[]} bots={[]} />}>
         <UserSidebar />
       </Suspense>
       <SidebarInset>{children}</SidebarInset>

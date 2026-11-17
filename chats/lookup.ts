@@ -3,17 +3,22 @@ import { and, asc, eq } from "drizzle-orm"
 import { db } from "@/db"
 import { bots, chatMembers, chats } from "@/db/schema"
 
-/** A chat together with the first bot that joined it. */
+/** A bot that belongs to a chat, in the shape the UI and agent both need. */
+export type ChatBot = {
+  id: string
+  name: string
+  job: string
+  instructions: string | null
+  avatar: string
+}
+
+/** A chat together with every bot that joined it, in join order. */
 export type ChatDetails = {
   id: string
   title: string
-  bot: {
-    id: string
-    name: string
-    job: string
-    instructions: string | null
-    avatar: string
-  } | null
+  kind: "direct" | "group"
+  bot: ChatBot | null
+  bots: ChatBot[]
 }
 
 /**
@@ -25,7 +30,7 @@ export async function findChatDetails(
   chatId: string,
   userId?: string
 ): Promise<ChatDetails | null> {
-  const [row] = await db
+  const rows = await db
     .select({ chat: chats, bot: bots })
     .from(chats)
     .leftJoin(chatMembers, eq(chatMembers.chatId, chats.id))
@@ -42,21 +47,32 @@ export async function findChatDetails(
         : eq(chats.id, chatId)
     )
     .orderBy(asc(chatMembers.joinedAt), asc(chatMembers.botId))
-    .limit(1)
 
-  if (!row) return null
+  const chat = rows[0]?.chat
+  if (!chat) return null
+
+  const allBots: ChatBot[] = rows.flatMap(({ bot }) =>
+    bot
+      ? [
+          {
+            id: bot.id,
+            name: bot.name,
+            job: bot.job,
+            instructions: bot.instructions,
+            avatar: bot.avatar,
+          },
+        ]
+      : []
+  )
 
   return {
-    id: row.chat.id,
-    title: row.chat.name?.trim() || row.bot?.name || "",
-    bot: row.bot
-      ? {
-          id: row.bot.id,
-          name: row.bot.name,
-          job: row.bot.job,
-          instructions: row.bot.instructions,
-          avatar: row.bot.avatar,
-        }
-      : null,
+    id: chat.id,
+    kind: chat.kind,
+    title:
+      chat.name?.trim() ||
+      allBots[0]?.name ||
+      (chat.kind === "group" ? "Group chat" : ""),
+    bot: allBots[0] ?? null,
+    bots: allBots,
   }
 }
