@@ -20,11 +20,23 @@ import {
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
+import type { TriggerChatTransport } from "@trigger.dev/sdk/chat"
+import {
+  useLoadTranscript,
+  useTriggerChatTransport,
+} from "@trigger.dev/sdk/chat/react"
+import { type UIMessage } from "ai"
 import { MessageSquareIcon } from "lucide-react"
-import { useMemo } from "react"
+import { useCallback } from "react"
 
-/** A single, in-memory AI conversation. Messages are not persisted. */
+import {
+  loadChatTranscript,
+  mintChatAccessToken,
+  startChatSession,
+} from "@/app/actions"
+import type { teammateChat } from "@/trigger/chat"
+
+/** A single AI conversation, persisted by the agent's transcript storage. */
 export function ChatPanel({
   chatId,
   botName,
@@ -32,11 +44,57 @@ export function ChatPanel({
   chatId: string
   botName?: string
 }) {
-  const transport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/chat", body: { chatId } }),
-    [chatId]
+  const transport = useTriggerChatTransport<typeof teammateChat>({
+    task: "teammate-chat",
+    accessToken: ({ chatId }) => mintChatAccessToken(chatId),
+    startSession: ({ chatId }) => startChatSession({ chatId }),
+  })
+  const { messages: initialMessages, isLoading } = useLoadTranscript(
+    chatId,
+    loadChatTranscript,
+    { transport }
   )
-  const { messages, sendMessage, status, error, stop } = useChat({ transport })
+
+  if (isLoading) return null
+
+  return (
+    <ChatView
+      botName={botName}
+      chatId={chatId}
+      initialMessages={initialMessages}
+      transport={transport}
+    />
+  )
+}
+
+function ChatView({
+  chatId,
+  botName,
+  initialMessages,
+  transport,
+}: {
+  chatId: string
+  botName?: string
+  initialMessages: UIMessage[]
+  transport: TriggerChatTransport
+}) {
+  const {
+    messages,
+    sendMessage,
+    status,
+    error,
+    stop: aiStop,
+  } = useChat({
+    id: chatId,
+    messages: initialMessages,
+    transport,
+    resume: initialMessages.length > 0,
+  })
+
+  const stop = useCallback(() => {
+    aiStop()
+    void transport.stopGeneration(chatId)
+  }, [aiStop, chatId, transport])
 
   const handleSubmit = (message: PromptInputMessage) => {
     const text = message.text.trim()
