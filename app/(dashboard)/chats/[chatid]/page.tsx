@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 
 import { getChat } from "@/chats/queries"
 import { ChatHeader } from "@/components/chat-header"
+import { ChatPanel } from "@/components/chat-panel"
 
 export default async function Page({
   params,
@@ -15,5 +16,10 @@ export default async function Page({
   const chat = await getChat(chatid)
   if (!chat) notFound()
 
-  return <ChatHeader chat={chat} />
+  return (
+    <div className="flex h-svh min-h-0 flex-col">
+      <ChatHeader chat={chat} />
+      <ChatPanel chatId={chat.id} botName={chat.bot?.name} />
+    </div>
+  )
 }
