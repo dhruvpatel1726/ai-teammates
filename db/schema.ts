@@ -81,6 +81,23 @@ export const createBotSchema = insertBotSchema
 export type CreateBotInput = z.infer<typeof createBotSchema>
 
 /**
+ * The edit form submits the same user-editable fields plus the bot ID, which
+ * the action uses to scope the update to the signed-in user's bot.
+ */
+export const updateBotSchema = createBotSchema.extend({
+  id: z.string().min(1),
+})
+
+export type UpdateBotInput = z.infer<typeof updateBotSchema>
+
+/** Deleting a bot only needs its ID; the action scopes it to the Clerk user. */
+export const deleteBotSchema = z.object({
+  id: z.string().min(1),
+})
+
+export type DeleteBotInput = z.infer<typeof deleteBotSchema>
+
+/**
  * A direct chat is one bot talking to the user; a group chat is several bots
  * sharing one conversation.
  */

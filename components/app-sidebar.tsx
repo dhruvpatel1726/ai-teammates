@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import { UserButton } from "@clerk/nextjs"
+import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
 import { BotIcon, MessageCircleIcon, PlusIcon, SearchIcon } from "lucide-react"
 
 import { refreshUserChats } from "@/actions/chat"
@@ -39,7 +41,11 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { BOT_CREATED_EVENT } from "@/lib/chat-events"
+import {
+  BOT_CREATED_EVENT,
+  BOT_DELETED_EVENT,
+  BOT_UPDATED_EVENT,
+} from "@/lib/chat-events"
 import type { UserChat } from "@/queries/bots"
 
 /**
@@ -49,6 +55,13 @@ import type { UserChat } from "@/queries/bots"
  * user menu.
  */
 function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
+  const pathname = usePathname()
+  const router = useRouter()
+
+  // The dashboard route group does not affect the URL, so the active chat is
+  // the segment immediately after /chats/.
+  const activeChatId = pathname.match(/^\/chats\/([^/]+)/)?.[1] ?? null
+
   // Clerk mounts its UI on the client, so the server has no user to render.
   // Waiting a tick avoids hydrating a placeholder into a fully rendered
   // UserButton, which React reports as a hydration mismatch.
@@ -70,7 +83,13 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
 
   React.useEffect(() => {
     window.addEventListener(BOT_CREATED_EVENT, handleBotCreated)
-    return () => window.removeEventListener(BOT_CREATED_EVENT, handleBotCreated)
+    window.addEventListener(BOT_UPDATED_EVENT, handleBotCreated)
+    window.addEventListener(BOT_DELETED_EVENT, handleBotCreated)
+    return () => {
+      window.removeEventListener(BOT_CREATED_EVENT, handleBotCreated)
+      window.removeEventListener(BOT_UPDATED_EVENT, handleBotCreated)
+      window.removeEventListener(BOT_DELETED_EVENT, handleBotCreated)
+    }
   }, [handleBotCreated])
 
   React.useEffect(() => {
@@ -137,7 +156,12 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
             <SidebarMenu>
               {chats.map((chat) => (
                 <SidebarMenuItem key={chat.id}>
-                  <SidebarMenuButton size="lg" tooltip={chat.title}>
+                  <SidebarMenuButton
+                    size="lg"
+                    tooltip={chat.title}
+                    render={<Link href={`/chats/${chat.id}`} />}
+                    isActive={chat.id === activeChatId}
+                  >
                     <ChatAvatar seed={chat.avatarSeed} />
                     <span className="min-w-0 truncate group-data-[collapsible=icon]:hidden">
                       {chat.title}
@@ -209,7 +233,10 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
                   key={chat.id}
                   value={chat.id}
                   keywords={[chat.title]}
-                  onSelect={() => setSearchOpen(false)}
+                  onSelect={() => {
+                    setSearchOpen(false)
+                    router.push(`/chats/${chat.id}`)
+                  }}
                 >
                   <ChatAvatar seed={chat.avatarSeed} />
                   <span className="min-w-0 truncate">{chat.title}</span>

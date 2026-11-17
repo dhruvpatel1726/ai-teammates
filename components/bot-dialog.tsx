@@ -3,11 +3,22 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { PlusIcon, ShuffleIcon } from "lucide-react"
+import { PlusIcon, ShuffleIcon, Trash2Icon } from "lucide-react"
 import { useForm, useWatch } from "react-hook-form"
 
-import { createBot } from "@/actions/bot"
+import { createBot, deleteBot, updateBot } from "@/actions/bot"
 import { ChatAvatar } from "@/components/chat-avatar"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -33,7 +44,19 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { createBotSchema, type CreateBotInput } from "@/db/schema"
-import { BOT_CREATED_EVENT } from "@/lib/chat-events"
+import {
+  BOT_CREATED_EVENT,
+  BOT_DELETED_EVENT,
+  BOT_UPDATED_EVENT,
+} from "@/lib/chat-events"
+
+type EditableBot = {
+  id: string
+  name: string
+  job: string
+  instructions: string | null
+  avatar: string
+}
 
 type BotDialogProps = {
   /** Open the dialog on first render, e.g. when the URL is `/?open=1`. */
@@ -44,6 +67,10 @@ type BotDialogProps = {
   onOpenChange?: (open: boolean) => void
   /** Hide the built-in trigger when another control opens the dialog. */
   showTrigger?: boolean
+  /** When supplied, the form edits this bot instead of creating a new one. */
+  bot?: EditableBot
+  /** Custom trigger, e.g. the settings button in a chat header. */
+  trigger?: React.ReactElement
 }
 
 type BotPreset = Pick<CreateBotInput, "name" | "job" | "instructions">
@@ -84,34 +111,46 @@ function BotDialog({
   defaultAvatarSeed,
   onOpenChange,
   showTrigger = true,
+  bot,
+  trigger,
 }: BotDialogProps) {
   const router = useRouter()
   const [open, setOpenState] = React.useState(defaultOpen)
+  const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [isDeleting, setIsDeleting] = React.useState(false)
+  const isEditing = !!bot
 
   function setOpen(nextOpen: boolean) {
     setOpenState(nextOpen)
     onOpenChange?.(nextOpen)
   }
 
-  const emptyValues: CreateBotInput = {
-    name: "",
-    job: "",
-    instructions: "",
-    avatar: defaultAvatarSeed,
-  }
+  const defaultValues: CreateBotInput = bot
+    ? {
+        name: bot.name,
+        job: bot.job,
+        instructions: bot.instructions ?? "",
+        avatar: bot.avatar,
+      }
+    : {
+        name: "",
+        job: "",
+        instructions: "",
+        avatar: defaultAvatarSeed,
+      }
 
   const form = useForm<CreateBotInput>({
     resolver: zodResolver(createBotSchema),
-    defaultValues: emptyValues,
+    defaultValues,
   })
 
   const { errors, isSubmitting } = form.formState
   const avatarSeed = useWatch({ control: form.control, name: "avatar" })
   const selectedJob = useWatch({ control: form.control, name: "job" })
 
-  function closeDialog() {
+  function closeDialog(resetValues?: CreateBotInput) {
     setOpen(false)
-    form.reset(emptyValues)
+    form.reset(resetValues ?? defaultValues)
     // Drop the `?open=1` the empty state uses to deep-link into this dialog.
     if (window.location.search) {
       router.replace("/", { scroll: false })
@@ -147,12 +186,16 @@ function BotDialog({
   }
 
   const onSubmit = form.handleSubmit(async (values) => {
-    const result = await createBot(values)
+    const result = bot
+      ? await updateBot({ ...values, id: bot.id })
+      : await createBot(values)
 
     if (result.error) {
       toast.add({
         type: "error",
-        title: "Could not create the bot",
+        title: isEditing
+          ? "Could not update the bot"
+          : "Could not create the bot",
         description: result.error,
       })
       return
@@ -160,31 +203,71 @@ function BotDialog({
 
     toast.add({
       type: "success",
-      title: "Bot created",
-      description: `${values.name} is ready to chat.`,
+      title: isEditing ? "Bot updated" : "Bot created",
+      description: isEditing
+        ? `${values.name}'s details were saved.`
+        : `${values.name} is ready to chat.`,
     })
 
-    closeDialog()
-    // Both dialog instances fire this, so the sidebar refreshes its chat query
-    // whether the bot was created from the header or the empty state.
-    window.dispatchEvent(new Event(BOT_CREATED_EVENT))
+    // Reset to the saved values so reopening this same dialog after an edit
+    // shows the updated bot instead of the props from before router.refresh().
+    closeDialog(isEditing ? values : undefined)
+    // The sidebar listens for both events so its chat list refreshes after a
+    // create or an edit, whichever dialog instance was used.
+    window.dispatchEvent(
+      new Event(isEditing ? BOT_UPDATED_EVENT : BOT_CREATED_EVENT)
+    )
     router.refresh()
   })
 
+  const onDelete = async () => {
+    if (!bot) return
+
+    setIsDeleting(true)
+    const result = await deleteBot({ id: bot.id })
+    setIsDeleting(false)
+
+    if (result.error) {
+      toast.add({
+        type: "error",
+        title: "Could not delete the bot",
+        description: result.error,
+      })
+      return
+    }
+
+    setDeleteOpen(false)
+    setOpen(false)
+    toast.add({
+      type: "success",
+      title: "Bot deleted",
+      description: `${bot.name} was removed.`,
+    })
+    window.dispatchEvent(new Event(BOT_DELETED_EVENT))
+    // The chat is gone, so never leave the user on its now-invalid URL.
+    router.replace("/", { scroll: false })
+    router.refresh()
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      {showTrigger && (
-        <DialogTrigger render={<Button variant="secondary" />}>
-          <PlusIcon data-icon="inline-start" />
-          Create a new bot
-        </DialogTrigger>
-      )}
+      {showTrigger &&
+        (trigger ? (
+          <DialogTrigger render={trigger} />
+        ) : (
+          <DialogTrigger render={<Button variant="secondary" />}>
+            <PlusIcon data-icon="inline-start" />
+            Create a new bot
+          </DialogTrigger>
+        ))}
 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>New bot</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit bot" : "New bot"}</DialogTitle>
           <DialogDescription>
-            Give it a face, a name, and a job to do.
+            {isEditing
+              ? "Update this bot's face, name, and job."
+              : "Give it a face, a name, and a job to do."}
           </DialogDescription>
         </DialogHeader>
 
@@ -262,14 +345,54 @@ function BotDialog({
             </Field>
           </FieldGroup>
 
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
-              Cancel
-            </DialogClose>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Spinner data-icon="inline-start" />}
-              Create bot
-            </Button>
+          <DialogFooter className="sm:justify-between">
+            {isEditing && bot && (
+              <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                <AlertDialogTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={isDeleting}
+                    />
+                  }
+                >
+                  <Trash2Icon data-icon="inline-start" />
+                  Delete bot
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this bot?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {bot.name} and its chat will be permanently removed. This
+                      action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isDeleting}>
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      variant="destructive"
+                      disabled={isDeleting}
+                      onClick={onDelete}
+                    >
+                      {isDeleting && <Spinner data-icon="inline-start" />}
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <DialogClose render={<Button variant="outline" />}>
+                Cancel
+              </DialogClose>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <Spinner data-icon="inline-start" />}
+                {isEditing ? "Save changes" : "Create bot"}
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

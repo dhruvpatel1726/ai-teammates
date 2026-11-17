@@ -1,6 +1,7 @@
 "use server"
 
 import { auth } from "@clerk/nextjs/server"
+import { and, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
 import { db } from "@/db"
@@ -10,6 +11,10 @@ import {
   chats,
   createBotSchema,
   type CreateBotInput,
+  deleteBotSchema,
+  type DeleteBotInput,
+  updateBotSchema,
+  type UpdateBotInput,
 } from "@/db/schema"
 
 export type CreateBotResult =
@@ -85,5 +90,108 @@ export async function createBot(
       chatId: null,
       error: "Could not create the bot. Please try again.",
     }
+  }
+}
+
+/** Update the editable fields of a bot owned by the signed-in Clerk user. */
+export async function updateBot(
+  input: UpdateBotInput
+): Promise<{ error: string | null }> {
+  const { isAuthenticated, userId } = await auth()
+  if (!isAuthenticated || !userId) {
+    return { error: "You need to be signed in to update a bot." }
+  }
+
+  // Server Actions are public endpoints, so re-validate instead of trusting
+  // the form's resolver.
+  const parsed = updateBotSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? "Those bot details are not valid.",
+    }
+  }
+
+  const { id, name, job, avatar, instructions } = parsed.data
+
+  try {
+    const [updated] = await db
+      .update(bots)
+      .set({ name, job, avatar, instructions: instructions || null })
+      .where(and(eq(bots.id, id), eq(bots.userId, userId)))
+      .returning({ id: bots.id })
+
+    if (!updated) {
+      return { error: "That bot could not be found." }
+    }
+
+    revalidatePath("/")
+    return { error: null }
+  } catch (error) {
+    console.error("Failed to update bot", error)
+    return { error: "Could not update the bot. Please try again." }
+  }
+}
+
+/**
+ * Delete a bot owned by the signed-in Clerk user, along with its direct chat.
+ *
+ * The ownership check runs before anything is deleted, and both deletes share
+ * a transaction so a bot is never removed while its chat is left behind.
+ * Group chats keep existing; deleting a bot only removes its memberships.
+ */
+export async function deleteBot(
+  input: DeleteBotInput
+): Promise<{ error: string | null }> {
+  const { isAuthenticated, userId } = await auth()
+  if (!isAuthenticated || !userId) {
+    return { error: "You need to be signed in to delete a bot." }
+  }
+
+  const parsed = deleteBotSchema.safeParse(input)
+  if (!parsed.success) {
+    return { error: "That bot could not be found." }
+  }
+
+  const { id } = parsed.data
+
+  try {
+    const [bot] = await db
+      .select({ id: bots.id })
+      .from(bots)
+      .where(and(eq(bots.id, id), eq(bots.userId, userId)))
+      .limit(1)
+
+    if (!bot) {
+      return { error: "That bot could not be found." }
+    }
+
+    await db.transaction(async (tx) => {
+      const directChats = await tx
+        .select({ chatId: chatMembers.chatId })
+        .from(chatMembers)
+        .innerJoin(chats, eq(chats.id, chatMembers.chatId))
+        .where(
+          and(
+            eq(chatMembers.botId, id),
+            eq(chats.userId, userId),
+            eq(chats.kind, "direct")
+          )
+        )
+
+      for (const { chatId } of directChats) {
+        await tx
+          .delete(chats)
+          .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))
+      }
+
+      await tx.delete(bots).where(and(eq(bots.id, id), eq(bots.userId, userId)))
+    })
+
+    revalidatePath("/")
+    return { error: null }
+  } catch (error) {
+    console.error("Failed to delete bot", error)
+    return { error: "Could not delete the bot. Please try again." }
   }
 }
