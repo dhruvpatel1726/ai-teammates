@@ -2,12 +2,21 @@
 
 import * as React from "react"
 import { UserButton } from "@clerk/nextjs"
-import { BotIcon, MessageCircleIcon, PlusIcon } from "lucide-react"
+import { BotIcon, MessageCircleIcon, PlusIcon, SearchIcon } from "lucide-react"
 
 import { refreshUserChats } from "@/actions/chat"
 import BotDialog from "@/components/bot-dialog"
 import { ChatAvatar } from "@/components/chat-avatar"
 import { Button } from "@/components/ui/button"
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Sidebar,
@@ -43,6 +53,7 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
   // UserButton, which React reports as a hydration mismatch.
   const [mounted, setMounted] = React.useState(false)
   const [newBotSeed, setNewBotSeed] = React.useState<string | null>(null)
+  const [searchOpen, setSearchOpen] = React.useState(false)
   const [chats, setChats] = React.useState(initialChats)
 
   React.useEffect(() => {
@@ -61,9 +72,21 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
     return () => window.removeEventListener(BOT_CREATED_EVENT, handleBotCreated)
   }, [handleBotCreated])
 
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
+        setSearchOpen((open) => !open)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
+
   return (
     <Sidebar>
-      <SidebarHeader className="flex-row items-center justify-end">
+      <SidebarHeader className="items-end">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={<Button variant="ghost" size="icon" aria-label="Create" />}
@@ -85,6 +108,25 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <Button
+          variant="ghost"
+          className="h-8 w-full min-w-0 justify-start rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
+          onClick={() => setSearchOpen(true)}
+        >
+          <SearchIcon data-icon="inline-start" />
+          <span className="min-w-0 truncate text-muted-foreground">
+            Search chats...
+          </span>
+          <KbdGroup className="ml-auto">
+            <Kbd>
+              {mounted && /Mac|iPhone|iPad/.test(navigator.userAgent)
+                ? "⌘"
+                : "Ctrl"}
+            </Kbd>
+            <Kbd>K</Kbd>
+          </KbdGroup>
+        </Button>
       </SidebarHeader>
 
       <SidebarContent>
@@ -147,6 +189,36 @@ function AppSidebar({ chats: initialChats }: { chats: UserChat[] }) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+
+      <CommandDialog
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        title="Search chats"
+        description="Search your chats"
+      >
+        <Command>
+          <CommandInput placeholder="Search chats..." />
+          <CommandList>
+            <CommandEmpty>No chats found.</CommandEmpty>
+            <CommandGroup heading="Chats">
+              {chats.map((chat) => (
+                <CommandItem
+                  key={chat.id}
+                  value={chat.id}
+                  keywords={[chat.title]}
+                  onSelect={() => setSearchOpen(false)}
+                >
+                  <ChatAvatar seed={chat.avatarSeed} />
+                  <span className="min-w-0 truncate">{chat.title}</span>
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                    {chat.dateLabel}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </CommandDialog>
 
       {newBotSeed && (
         <BotDialog
