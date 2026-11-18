@@ -43,5 +43,21 @@ export function usePaidFeature() {
     [router]
   )
 
-  return { canUse, isLoaded, showUpgradeToast }
+  const showUsageToast = useCallback(
+    (message: string) => {
+      toast.add({
+        type: "error",
+        title: "Usage limit reached",
+        description: message,
+        actionProps: {
+          children: "View usage",
+          onClick: () => router.push("/usage"),
+        },
+        timeout: 8000,
+      })
+    },
+    [router]
+  )
+
+  return { canUse, isLoaded, showUpgradeToast, showUsageToast }
 }

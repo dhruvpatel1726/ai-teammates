@@ -15,6 +15,7 @@ export type ChatBot = {
 /** A chat together with every bot that joined it, in join order. */
 export type ChatDetails = {
   id: string
+  userId: string
   title: string
   kind: "direct" | "group"
   bot: ChatBot | null
@@ -67,6 +68,7 @@ export async function findChatDetails(
 
   return {
     id: chat.id,
+    userId: chat.userId,
     kind: chat.kind,
     title:
       chat.name?.trim() ||

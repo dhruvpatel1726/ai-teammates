@@ -4,7 +4,13 @@ import * as React from "react"
 import { UserButton } from "@clerk/nextjs"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BotIcon, MessageCircleIcon, PlusIcon, SearchIcon } from "lucide-react"
+import {
+  BotIcon,
+  GaugeIcon,
+  MessageCircleIcon,
+  PlusIcon,
+  SearchIcon,
+} from "lucide-react"
 
 import { refreshUserChats } from "@/actions/chat"
 import BotDialog from "@/components/bot-dialog"
@@ -218,7 +224,15 @@ function AppSidebar({
                       userButtonAvatarBox: "size-6! shrink-0",
                     },
                   }}
-                />
+                >
+                  <UserButton.MenuItems>
+                    <UserButton.Link
+                      href="/usage"
+                      label="Usage"
+                      labelIcon={<GaugeIcon />}
+                    />
+                  </UserButton.MenuItems>
+                </UserButton>
               ) : (
                 <div className="flex h-12 w-full items-center gap-2 px-2 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!">
                   <Skeleton className="size-6 shrink-0 rounded-full" />

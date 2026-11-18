@@ -4,6 +4,13 @@ import { isStepCount, tool, type ToolSet } from "ai"
 import { z } from "zod"
 
 import { findChatDetails, type ChatBot } from "@/chats/lookup"
+import {
+  UsageLimitError,
+  chargeUsage,
+  estimateTokenCostUsd,
+  getActiveUsagePeriod,
+  getUsageSummary,
+} from "@/lib/usage"
 
 // Fast, non-reasoning model keeps the chat responsive.
 const MODEL = "grok-4-1-fast-non-reasoning"
@@ -161,6 +168,16 @@ export const teammateChat = chat.agent({
   tools,
   run: async ({ chatId, messages, tools, signal, streamText, clientData }) => {
     const details = await findChatDetails(chatId)
+    if (details) {
+      // Every turn re-checks the ledger — a session can stay open long after
+      // its budget was exhausted by earlier turns.
+      const period = await getActiveUsagePeriod(details.userId)
+      const summary = await getUsageSummary(details.userId, period)
+      if (summary.buckets.aiTokens.remainingMicros <= 0) {
+        throw new UsageLimitError("aiTokens")
+      }
+    }
+
     const isGroup = details?.kind === "group" && details.bots.length >= 2
     const respondingBotId = respondingBotOf(details, clientData?.botId)?.id
 
@@ -195,6 +212,28 @@ export const teammateChat = chat.agent({
           ),
           activeTools: [],
         }
+      },
+    })
+  },
+  onTurnComplete: async ({ chatId, usage, error }) => {
+    if (error || !usage) return
+
+    // The worker has no Clerk request context, so ownership comes from the
+    // trusted chat row rather than from client-supplied data.
+    const details = await findChatDetails(chatId)
+    if (!details) return
+
+    const period = await getActiveUsagePeriod(details.userId)
+    await chargeUsage({
+      userId: details.userId,
+      period,
+      category: "aiTokens",
+      costUsd: estimateTokenCostUsd(MODEL, usage),
+      source: "chat",
+      referenceId: chatId,
+      tokens: {
+        inputTokens: usage.inputTokens ?? undefined,
+        outputTokens: usage.outputTokens ?? undefined,
       },
     })
   },

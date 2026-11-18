@@ -1,12 +1,15 @@
 import { relations } from "drizzle-orm"
 import { createInsertSchema } from "drizzle-zod"
 import {
+  bigint,
   index,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core"
 import { nanoid } from "nanoid"
 import { z } from "zod"
@@ -192,3 +195,85 @@ export const chatMembersRelations = relations(chatMembers, ({ one }) => ({
     references: [bots.id],
   }),
 }))
+
+/** The two billable resources metered inside a subscription period. */
+export const usageCategory = pgEnum("usage_category", [
+  "ai_tokens",
+  "sandboxes",
+])
+
+/**
+ * One user's spending rollup for a Clerk billing period.
+ *
+ * `periodStart` comes from Clerk's subscription item when available, with a
+ * UTC calendar month as the fallback. The unique (user, start) pair keeps a
+ * period idempotent across server actions and the Trigger worker.
+ */
+export const usagePeriods = pgTable(
+  "usage_periods",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    userId: text("user_id").notNull(),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    // Microdollars, so integer arithmetic never loses sub-cent token costs.
+    aiSpentMicros: bigint("ai_spent_micros", { mode: "number" })
+      .notNull()
+      .default(0),
+    sandboxSpentMicros: bigint("sandbox_spent_micros", { mode: "number" })
+      .notNull()
+      .default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("usage_periods_user_start_idx").on(
+      table.userId,
+      table.periodStart
+    ),
+    index("usage_periods_user_idx").on(table.userId),
+  ]
+)
+
+/** Append-only audit trail behind the per-period spending rollup. */
+export const usageEntries = pgTable(
+  "usage_entries",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    periodId: text("period_id")
+      .notNull()
+      .references(() => usagePeriods.id, { onDelete: "cascade" }),
+    category: usageCategory("category").notNull(),
+    costMicros: bigint("cost_micros", { mode: "number" }).notNull(),
+    inputTokens: bigint("input_tokens", { mode: "number" }),
+    outputTokens: bigint("output_tokens", { mode: "number" }),
+    // Daytona bills CPU cores, memory and disk by the GiB-second. These are
+    // nullable until a sandbox runtime records them.
+    cpuCoreSeconds: numeric("cpu_core_seconds", { precision: 14, scale: 3 }),
+    memoryGiBSeconds: numeric("memory_gib_seconds", {
+      precision: 14,
+      scale: 3,
+    }),
+    diskGiBSeconds: numeric("disk_gib_seconds", { precision: 14, scale: 3 }),
+    source: text("source").notNull(),
+    referenceId: text("reference_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("usage_entries_period_idx").on(table.periodId),
+    index("usage_entries_period_category_idx").on(
+      table.periodId,
+      table.category
+    ),
+  ]
+)
+
+export type UsagePeriod = typeof usagePeriods.$inferSelect
+export type NewUsageEntry = typeof usageEntries.$inferInsert

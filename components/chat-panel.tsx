@@ -44,6 +44,7 @@ import { CheckIcon, ChevronDownIcon, MessageSquareIcon } from "lucide-react"
 import { useCallback, useState } from "react"
 
 import {
+  checkChatBudget,
   loadChatTranscript,
   mintChatAccessToken,
   startChatSession,
@@ -126,7 +127,8 @@ function ChatView({
   transport: TriggerChatTransport
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const { canUse, isLoaded, showUpgradeToast } = usePaidFeature()
+  const { canUse, isLoaded, showUpgradeToast, showUsageToast } =
+    usePaidFeature()
   const {
     messages,
     sendMessage,
@@ -145,13 +147,20 @@ function ChatView({
     void transport.stopGeneration(chatId)
   }, [aiStop, chatId, transport])
 
-  const handleSubmit = (message: PromptInputMessage) => {
+  const handleSubmit = async (message: PromptInputMessage) => {
     const text = message.text.trim()
     if (!text) return
     if (isLoaded && !canUse("bots")) {
       showUpgradeToast("bots")
       return
     }
+
+    const budget = await checkChatBudget(chatId)
+    if (!budget.ok) {
+      showUsageToast(budget.message)
+      return
+    }
+
     // The first argument's metadata is persisted on the message so the badge
     // can show whom it was addressed to. The options metadata is the per-turn
     // client data and wins over the transport's value on a fresh selection.
