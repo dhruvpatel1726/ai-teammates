@@ -48,6 +48,7 @@ import {
   mintChatAccessToken,
   startChatSession,
 } from "@/app/actions"
+import { usePaidFeature } from "@/lib/use-paid-feature"
 import type { teammateChat } from "@/trigger/chat"
 
 type ChatBotOption = {
@@ -125,6 +126,7 @@ function ChatView({
   transport: TriggerChatTransport
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
+  const { canUse, isLoaded, showUpgradeToast } = usePaidFeature()
   const {
     messages,
     sendMessage,
@@ -146,6 +148,10 @@ function ChatView({
   const handleSubmit = (message: PromptInputMessage) => {
     const text = message.text.trim()
     if (!text) return
+    if (isLoaded && !canUse("bots")) {
+      showUpgradeToast("bots")
+      return
+    }
     // The first argument's metadata is persisted on the message so the badge
     // can show whom it was addressed to. The options metadata is the per-turn
     // client data and wins over the transport's value on a fresh selection.

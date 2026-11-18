@@ -44,11 +44,13 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { createBotSchema, type CreateBotInput } from "@/db/schema"
+import { PAID_FEATURE_ERROR_CODE } from "@/lib/billing"
 import {
   BOT_CREATED_EVENT,
   BOT_DELETED_EVENT,
   BOT_UPDATED_EVENT,
 } from "@/lib/chat-events"
+import { usePaidFeature } from "@/lib/use-paid-feature"
 
 type EditableBot = {
   id: string
@@ -115,6 +117,7 @@ function BotDialog({
   trigger,
 }: BotDialogProps) {
   const router = useRouter()
+  const { showUpgradeToast } = usePaidFeature()
   const [open, setOpenState] = React.useState(defaultOpen)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [isDeleting, setIsDeleting] = React.useState(false)
@@ -191,6 +194,10 @@ function BotDialog({
       : await createBot(values)
 
     if (result.error) {
+      if ("code" in result && result.code === PAID_FEATURE_ERROR_CODE) {
+        showUpgradeToast("bots")
+        return
+      }
       toast.add({
         type: "error",
         title: isEditing

@@ -5,6 +5,7 @@ import { chat, defaultStorage } from "@trigger.dev/sdk/ai"
 import { auth } from "@clerk/nextjs/server"
 
 import { getChat } from "@/chats/queries"
+import { BILLABLE_FEATURES, PAID_FEATURE_MESSAGES } from "@/lib/billing"
 import type { teammateChat } from "@/trigger/chat"
 
 const startSession =
@@ -12,23 +13,36 @@ const startSession =
 const loadTranscript = chat.createLoadTranscriptAction(defaultStorage)
 
 async function requireOwnedChat(chatId: string) {
-  await auth.protect()
+  const authObject = await auth.protect()
 
   const ownedChat = await getChat(chatId)
   if (!ownedChat) throw new Error("Chat not found")
+
+  return authObject
+}
+
+function requirePaidFeature(
+  has: Awaited<ReturnType<typeof requireOwnedChat>>["has"],
+  feature: keyof typeof BILLABLE_FEATURES
+) {
+  if (!has({ feature: BILLABLE_FEATURES[feature] })) {
+    throw new Error(PAID_FEATURE_MESSAGES[feature])
+  }
 }
 
 export async function startChatSession(
   params: Parameters<typeof startSession>[0]
 ) {
-  await requireOwnedChat(params.chatId)
+  const { has } = await requireOwnedChat(params.chatId)
+  requirePaidFeature(has, "bots")
   // Forward the transport's client data so the first turn sees the same
   // per-message selection that later turns receive through metadata.
   return startSession(params)
 }
 
 export async function mintChatAccessToken(chatId: string) {
-  await requireOwnedChat(chatId)
+  const { has } = await requireOwnedChat(chatId)
+  requirePaidFeature(has, "bots")
 
   return triggerAuth.createPublicToken({
     scopes: {

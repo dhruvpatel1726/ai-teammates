@@ -16,10 +16,20 @@ import {
   updateBotSchema,
   type UpdateBotInput,
 } from "@/db/schema"
+import {
+  BILLABLE_FEATURES,
+  PAID_FEATURE_ERROR_CODE,
+  PAID_FEATURE_MESSAGES,
+} from "@/lib/billing"
 
 export type CreateBotResult =
   | { botId: string; chatId: string; error: null }
-  | { botId: null; chatId: null; error: string }
+  | {
+      botId: null
+      chatId: null
+      error: string
+      code?: typeof PAID_FEATURE_ERROR_CODE
+    }
 
 /**
  * Creates a bot together with its direct chat and membership.
@@ -32,12 +42,21 @@ export type CreateBotResult =
 export async function createBot(
   input: CreateBotInput
 ): Promise<CreateBotResult> {
-  const { isAuthenticated, userId } = await auth()
+  const { isAuthenticated, userId, has } = await auth()
   if (!isAuthenticated || !userId) {
     return {
       botId: null,
       chatId: null,
       error: "You need to be signed in to create a bot.",
+    }
+  }
+
+  if (!has({ feature: BILLABLE_FEATURES.bots })) {
+    return {
+      botId: null,
+      chatId: null,
+      error: PAID_FEATURE_MESSAGES.bots,
+      code: PAID_FEATURE_ERROR_CODE,
     }
   }
 
