@@ -22,6 +22,12 @@ import {
   PAID_FEATURE_MESSAGES,
 } from "@/lib/billing"
 
+/**
+ * DEMO ONLY: forces an uncaught error out of bot creation so the error
+ * boundary is visible. Remove this constant and its guard before shipping.
+ */
+const DEMO_BOT_CREATION_ERROR: boolean = true
+
 export type CreateBotResult =
   | { botId: string; chatId: string; error: null }
   | {
@@ -49,6 +55,11 @@ export async function createBot(
       chatId: null,
       error: "You need to be signed in to create a bot.",
     }
+  }
+
+  // DEMO ONLY: uncaught on purpose — remove with DEMO_BOT_CREATION_ERROR.
+  if (DEMO_BOT_CREATION_ERROR) {
+    throw new Error("bot creation error")
   }
 
   if (!has({ feature: BILLABLE_FEATURES.bots })) {
